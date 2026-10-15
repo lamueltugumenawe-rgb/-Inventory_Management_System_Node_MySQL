@@ -1,0 +1,32 @@
+<!DOCTYPE html><html><head><title>Products - Kigezi Traders</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:Arial;margin:0;background:#f5f7fb}.nav{background:#1a5d1a;color:white;padding:12px;display:flex;justify-content:space-between;flex-wrap:wrap}.nav a{color:white;margin:0 6px;text-decoration:none;font-weight:bold}.card{background:white;margin:15px;padding:15px;border-radius:10px;box-shadow:0 2px 5px #ddd}input,button{padding:8px;margin:4px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #ddd;padding:6px;font-size:13px}th{background:#e8f5e9}.btn-override{background:#ff9800;color:white;border:none;border-radius:4px;padding:6px 10px;cursor:pointer}.btn-del{background:#d32f2f;color:white;border:none;border-radius:4px;padding:6px 10px;cursor:pointer}</style></head><body>
+<div class="nav"><div><b>🏪 Kigezi Traders</b></div><div><a href="dashboard.html">Dashboard</a><a href="index.html">Products</a><a href="suppliers.html">Suppliers</a><a href="purchases.html">Purchases</a><a href="sales.html">Sales</a><a href="reports.html">Reports</a><a href="#" onclick="logout()">Logout</a></div></div>
+<div class="card"><h3 id="formTitle">Add Product</h3>
+<input id="code" placeholder="Code e.g. P001"><input id="name" placeholder="Name e.g. Rice 25kg"><input id="category" placeholder="Category e.g. Food"><input id="unit_cost" type="number" placeholder="Unit Cost e.g. 70000"><input id="selling_price" type="number" placeholder="Selling Price e.g. 80000"><input id="opening_quantity" type="number" placeholder="Opening Qty e.g. 50"><input id="reorder_level" type="number" placeholder="Reorder e.g. 10">
+<input type="hidden" id="editId"><br><button id="mainBtn" onclick="save()" style="background:#1a5d1a;color:white;border:none;border-radius:5px;padding:10px 20px">Add Product</button><button id="cancelBtn" style="display:none" onclick="resetForm()">Cancel Override</button>
+</div>
+<div class="card"><h3>Products List</h3><table id="tbl"><tr><th>Code</th><th>Name</th><th>Stock</th><th>Price</th><th>Action</th></tr></table></div>
+<script>
+let products=[];
+async function load(){const r=await fetch('/api/products');products=await r.json();const t=document.getElementById('tbl');t.innerHTML='<tr><th>Code</th><th>Name</th><th>Stock</th><th>Price</th><th>Override Action</th></tr>';products.forEach(p=>{t.innerHTML+=`<tr><td>${p.product_code}</td><td>${p.product_name}</td><td>${p.current_stock ?? p.opening_quantity}</td><td>${p.selling_price}</td><td><button class="btn-override" onclick="overrideProd(${p.id})">Override/Edit</button> <button class="btn-del" onclick="delProd(${p.id})">Delete</button></td></tr>`})}
+load();
+function overrideProd(id){const p=products.find(x=>x.id==id);code.value=p.product_code;name.value=p.product_name;category.value=p.category||'';unit_cost.value=p.unit_cost||0;selling_price.value=p.selling_price;opening_quantity.value=p.current_stock||p.opening_quantity;reorder_level.value=p.reorder_level;editId.value=p.id;document.getElementById('formTitle').innerText='OVERRIDE Product ID '+id;document.getElementById('mainBtn').innerText='Save Override';document.getElementById('cancelBtn').style.display='inline';window.scrollTo(0,0)}
+function resetForm(){code.value='';name.value='';category.value='';unit_cost.value='';selling_price.value='';opening_quantity.value='';reorder_level.value='';editId.value='';document.getElementById('formTitle').innerText='Add Product';document.getElementById('mainBtn').innerText='Add Product';document.getElementById('cancelBtn').style.display='none'}
+async function save(){
+  const body={
+  product_code: document.getElementById('code').value,
+  product_name: document.getElementById('name').value,
+  category: document.getElementById('category').value,
+  cost_price: document.getElementById('unit_cost').value,
+  selling_price: document.getElementById('selling_price').value,
+  quantity: document.getElementById('opening_quantity').value || document.getElementById('stock')?.value || 100,
+  reorder_level: document.getElementById('reorder_level').value || document.getElementById('reorder')?.value
+};
+  if(!editId.value){
+    const r=await fetch('/api/products',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(r.ok){alert(j.message);resetForm();load()}else alert(j.error||'Error')
+  }else{
+    const r=await fetch('/api/products/'+editId.value,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();if(r.ok){alert('Override Success!');resetForm();load()}else alert(j.error||'Error')
+  }
+}
+async function delProd(id){if(!confirm('Delete product '+id+'?'))return;const r=await fetch('/api/products/'+id,{method:'DELETE'});const j=await r.json();if(r.ok){alert('Deleted');load()}else alert(j.error)}
+async function logout(){await fetch('/api/logout',{method:'POST'});location.href='login.html'}
+</script></body></html>

@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html><head><title>Reports - Kigezi</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<div style="background:#2d5a27; padding:10px; color:white; display:flex; justify-content:space-between;">
+<b>🧺 Kigezi Traders</b>
+<div>
+<a href="dashboard.html" style="color:white; margin:5px;">Dashboard</a>
+<a href="index.html" style="color:white; margin:5px;">Products</a>
+<a href="suppliers.html" style="color:white; margin:5px;">Suppliers</a>
+<a href="purchases.html" style="color:white; margin:5px;">Purchases</a>
+<a href="sales.html" style="color:white; margin:5px;">Sales</a>
+<a href="reports.html" style="color:white; margin:5px;"><b>Reports</b></a>
+<a href="login.html" style="color:white; margin-left:15px;">Logout</a>
+</div></div>
+<div style="padding:20px;">
+<h3>Reports</h3>
+<div style="display:flex; gap:20px;">
+<div style="background:white; padding:20px; flex:1; border-radius:5px;"><h4>Total Products</h4><h2 id="tp">0</h2></div>
+<div style="background:white; padding:20px; flex:1; border-radius:5px;"><h4>Total Suppliers</h4><h2 id="ts">0</h2></div>
+<div style="background:white; padding:20px; flex:1; border-radius:5px;"><h4>Low Stock</h4><h2 id="ls">0</h2></div>
+</div>
+<div style="background:white; padding:15px; margin-top:20px;">
+<h4>Low Stock Products (less than 10)</h4>
+<table border="1" width="100%" cellpadding="10" style="border-collapse:collapse;">
+<thead><tr><th>Name</th><th>Qty</th></tr></thead><tbody id="low"></tbody>
+</table>
+</div>
+</div>
+<script>
+async function load(){
+  const prod = await fetch('/api/products').then(r=>r.json());
+  const sup = await fetch('/api/suppliers').then(r=>r.json());
+  document.getElementById('tp').innerText = prod.length;
+  document.getElementById('ts').innerText = sup.length;
+  const low = prod.filter(p=>p.quantity < 10);
+  document.getElementById('ls').innerText = low.length;
+  document.getElementById('low').innerHTML = low.map(p=>`<tr><td>${p.name}</td><td style="color:red;">${p.quantity}</td></tr>`).join('');
+}
+load();
+</script>
+</body></html>

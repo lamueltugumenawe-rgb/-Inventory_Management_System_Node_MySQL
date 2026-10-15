@@ -1,0 +1,17 @@
+{
+  "name": "inventory-management-system",
+  "version": "1.0.0",
+  "description": "Student Inventory Management System using Node.js, Express and MySQL",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-session": "^1.19.0",
+    "mysql2": "^3.12.0"
+  }
+}
