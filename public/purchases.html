@@ -256,13 +256,13 @@
 
   /* ── TOAST ── */
   #toast {
-    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%) translateY(100px);
+    position: fixed; top: 24px; left: 50%; transform: translateX(-50%) translateY(-100px);
     background: #1b3a1b; color: white;
     padding: 14px 28px; border-radius: 50px;
-    font-size: 14px; font-weight: 600;
-    box-shadow: var(--shadow-lg);
+    font-size: 14px; font-weight: 700;
+    box-shadow: 0 12px 40px rgba(0,0,0,.35);
     transition: transform .35s cubic-bezier(.34,1.56,.64,1);
-    z-index: 9999; max-width: 90vw; text-align: center;
+    z-index: 999999; max-width: 90vw; text-align: center;
   }
   #toast.show { transform: translateX(-50%) translateY(0); }
   #toast.success { background: #1b5e20; }
@@ -531,6 +531,11 @@
         o.textContent = s.supplier_name || s.name;
         sel.appendChild(o);
       });
+      // Auto-select first supplier if available so user is never blocked
+      if (sel.options.length > 1) {
+        sel.selectedIndex = 1;
+        renderCart();
+      }
     } catch(e) { console.error('Suppliers:', e); }
   }
 
@@ -542,23 +547,41 @@
       const data = Array.isArray(j) ? j : (j.products || j.data || []);
       const sel = document.getElementById('productSelect');
       sel.innerHTML = '<option value="">— Select Product —</option>';
-      if (data.length === 0) { showToast('⚠ No products found. Add products first via Products page.', 'error'); return; }
+      if (data.length === 0) {
+        showToast('⚠ No products found. Add products first via Products tab.', 'error');
+        return;
+      }
       data.forEach(p => {
         const o = document.createElement('option');
         o.value = p.id;
-        o.textContent = (p.product_name || p.name) + '  [Stock: ' + (p.current_stock ?? p.stock ?? 0) + ']';
+        const stock = p.current_stock ?? p.stock ?? 0;
+        o.textContent = `${p.product_name || p.name}  [Stock: ${stock}]`;
         o.dataset.name = p.product_name || p.name;
-        o.dataset.cost = p.unit_cost || 0;
+        o.dataset.cost = p.unit_cost || p.cost_price || p.buying_price || 0;
+        o.dataset.stock = stock;
         sel.appendChild(o);
       });
-      // Auto-fill cost when product selected
-      sel.addEventListener('change', () => {
+
+      function updateCost() {
         const opt = sel.options[sel.selectedIndex];
-        if (opt && opt.dataset.cost) {
+        if (opt && opt.dataset.cost && opt.value) {
           document.getElementById('cost').value = opt.dataset.cost;
+        } else {
+          document.getElementById('cost').value = '';
         }
-      });
-    } catch(e) { console.error('Products:', e); showToast('❌ Failed to load products', 'error'); }
+      }
+      sel.addEventListener('change', updateCost);
+      sel.addEventListener('input', updateCost);
+
+      // Auto-select first real product for quick 1-click purchases
+      if (sel.options.length > 1) {
+        sel.selectedIndex = 1;
+        updateCost();
+      }
+    } catch(e) {
+      console.error('Products:', e);
+      showToast('❌ Failed to load products', 'error');
+    }
   }
 
   // ── ADD TO CART ────────────────────────────────────────
@@ -567,26 +590,49 @@
     const qty = parseInt(document.getElementById('qty').value) || 0;
     const cost = parseFloat(document.getElementById('cost').value) || 0;
 
-    if (!sel.value) { showToast('⚠ Please select a product', 'error'); return; }
-    if (qty <= 0) { showToast('⚠ Quantity must be at least 1', 'error'); return; }
-    if (cost <= 0) { showToast('⚠ Enter a valid unit cost', 'error'); return; }
+    if (!sel.value) {
+      showToast('⚠ Please select a product from the list', 'error');
+      sel.focus();
+      return false;
+    }
+    if (qty <= 0) {
+      showToast('⚠ Quantity must be at least 1', 'error');
+      document.getElementById('qty').focus();
+      return false;
+    }
+    if (cost <= 0) {
+      showToast('⚠ Enter a valid unit cost', 'error');
+      document.getElementById('cost').focus();
+      return false;
+    }
 
-    const name = sel.options[sel.selectedIndex].dataset.name || sel.options[sel.selectedIndex].textContent;
+    const opt = sel.options[sel.selectedIndex];
+    const name = opt.dataset.name || opt.textContent;
 
     // Check if already in cart — increase qty
-    const existing = cart.find(i => i.product_id === sel.value);
+    const existing = cart.find(i => String(i.product_id) === String(sel.value));
     if (existing) {
       existing.qty += qty;
+      existing.quantity = existing.qty;
       existing.subtotal = existing.qty * existing.cost;
       showToast('✓ Quantity updated for ' + name);
     } else {
-      cart.push({ product_id: sel.value, product_name: name, qty, cost, subtotal: qty * cost });
-      showToast('✓ Added: ' + name);
+      cart.push({
+        product_id: sel.value,
+        id: sel.value,
+        product_name: name,
+        qty: qty,
+        quantity: qty,
+        cost: cost,
+        unit_cost: cost,
+        subtotal: qty * cost
+      });
+      showToast('✓ Added to purchase cart: ' + name);
     }
 
-    // Reset qty only (keep product & cost for convenience)
     document.getElementById('qty').value = 1;
     renderCart();
+    return true;
   }
 
   // ── RENDER CART ────────────────────────────────────────
@@ -595,7 +641,7 @@
     let total = 0;
 
     if (cart.length === 0) {
-      tb.innerHTML = '<tr class="empty-row"><td colspan="6">🛒 No items yet — add products above</td></tr>';
+      tb.innerHTML = '<tr class="empty-row"><td colspan="6">🛒 No items yet — choose product and click ＋ Add to List</td></tr>';
     } else {
       tb.innerHTML = '';
       cart.forEach((it, i) => {
@@ -603,7 +649,7 @@
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><strong>${i + 1}</strong></td>
-          <td>${it.product_name}</td>
+          <td><strong>${it.product_name}</strong></td>
           <td><span class="badge badge-orange">${it.qty}</span></td>
           <td>${Number(it.cost).toLocaleString()}</td>
           <td><strong style="color:var(--green-dk);">${Number(it.subtotal).toLocaleString()}</strong></td>
@@ -622,10 +668,8 @@
 
     // Update supplier name in summary
     const supSel = document.getElementById('supplierSelect');
-    const supOpt = supSel.options[supSel.selectedIndex];
+    const supOpt = (supSel && supSel.selectedIndex >= 0) ? supSel.options[supSel.selectedIndex] : null;
     document.getElementById('summarySupplier').textContent = (supOpt && supOpt.value) ? supOpt.textContent : '—';
-
-    document.getElementById('recordBtn').disabled = cart.length === 0;
   }
 
   function removeItem(i) {
@@ -637,13 +681,37 @@
 
   // ── RECORD PURCHASE ───────────────────────────────────
   async function recordPurchase() {
-    if (cart.length === 0) { showToast('⚠ Add at least one item', 'error'); return; }
-    const supplier_id = document.getElementById('supplierSelect').value;
-    if (!supplier_id) { showToast('⚠ Please select a supplier', 'error'); return; }
+    // If user hasn't clicked "+ Add to List", but has filled the product form, auto-add it!
+    if (cart.length === 0) {
+      const sel = document.getElementById('productSelect');
+      const cost = parseFloat(document.getElementById('cost').value) || 0;
+      if (sel.value && cost > 0) {
+        const added = addToList();
+        if (!added) return;
+      } else {
+        showToast('⚠ Please select a product and click ＋ Add to List first', 'error');
+        sel.focus();
+        return;
+      }
+    }
+
+    const supSel = document.getElementById('supplierSelect');
+    let supplier_id = supSel.value;
+    if (!supplier_id) {
+      if (supSel.options.length > 1) {
+        supSel.selectedIndex = 1;
+        supplier_id = supSel.value;
+        renderCart();
+      } else {
+        showToast('⚠ Please select a supplier', 'error');
+        supSel.focus();
+        return;
+      }
+    }
 
     const btn = document.getElementById('recordBtn');
     btn.disabled = true;
-    btn.textContent = '⏳ Recording...';
+    btn.textContent = '⏳ Recording purchase...';
 
     try {
       const res = await api('/api/purchases', {
@@ -659,6 +727,7 @@
       cart = [];
       renderCart();
       loadHistory();
+      loadProducts();
     } catch(e) {
       showToast('❌ Error: ' + e.message, 'error');
     } finally {
@@ -702,6 +771,19 @@
 
   // ── SUPPLIER CHANGE UPDATES SUMMARY ──────────────────
   document.getElementById('supplierSelect').addEventListener('change', renderCart);
+
+  // Allow Enter key to quickly add to list
+  ['qty', 'cost'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          addToList();
+        }
+      });
+    }
+  });
 
   // ── INIT ──────────────────────────────────────────────
   checkAuth().then(() => {

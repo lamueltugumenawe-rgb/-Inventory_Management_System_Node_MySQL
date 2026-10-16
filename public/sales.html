@@ -497,18 +497,18 @@
 
     #toast {
       position: fixed;
-      bottom: 28px;
+      top: 24px;
       left: 50%;
-      transform: translateX(-50%) translateY(100px);
+      transform: translateX(-50%) translateY(-100px);
       background: #1b3a1b;
       color: white;
       padding: 14px 28px;
       border-radius: 50px;
       font-size: 14px;
-      font-weight: 600;
-      box-shadow: 0 12px 40px rgba(0, 0, 0, .2);
+      font-weight: 700;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .35);
       transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
-      z-index: 9999;
+      z-index: 999999;
       max-width: 90vw;
       text-align: center;
     }
@@ -729,46 +729,118 @@
         const data = Array.isArray(j) ? j : (j.products || j.data || []);
         const sel = document.getElementById('productSelect');
         sel.innerHTML = '<option value="">— Select Product —</option>';
-        if (data.length === 0) { showToast('⚠ No products found. Add products first.', 'error'); return; }
+        if (data.length === 0) {
+          showToast('⚠ No products found. Add products first via Products tab.', 'error');
+          return;
+        }
         data.forEach(p => {
           const o = document.createElement('option');
           o.value = p.id;
-          o.textContent = (p.product_name || p.name) + '  [Stock: ' + (p.current_stock ?? p.stock ?? 0) + ']';
+          const stock = p.current_stock ?? p.stock ?? 0;
+          o.textContent = `${p.product_name || p.name}  [Stock: ${stock}]`;
           o.dataset.name = p.product_name || p.name;
-          o.dataset.price = p.selling_price || 0;
+          o.dataset.price = p.selling_price || p.price || 0;
+          o.dataset.stock = stock;
           sel.appendChild(o);
         });
-        sel.addEventListener('change', () => {
+
+        function updatePrice() {
           const opt = sel.options[sel.selectedIndex];
-          if (opt && opt.dataset.price) document.getElementById('price').value = opt.dataset.price;
-        });
-      } catch (e) { console.error('Load products error:', e); showToast('❌ Failed to load products', 'error'); }
+          if (opt && opt.dataset.price && opt.value) {
+            document.getElementById('price').value = opt.dataset.price;
+          } else {
+            document.getElementById('price').value = '';
+          }
+        }
+        sel.addEventListener('change', updatePrice);
+        sel.addEventListener('input', updatePrice);
+
+        // Auto-select first real product for quick 1-click sales
+        if (sel.options.length > 1) {
+          sel.selectedIndex = 1;
+          updatePrice();
+        }
+      } catch (e) {
+        console.error('Load products error:', e);
+        showToast('❌ Failed to load products', 'error');
+      }
     }
 
     function addToList() {
       const sel = document.getElementById('productSelect');
       const qty = parseInt(document.getElementById('qty').value) || 0;
       const price = parseFloat(document.getElementById('price').value) || 0;
-      if (!sel.value) { showToast('⚠ Select a product', 'error'); return; }
-      if (qty <= 0) { showToast('⚠ Enter a valid quantity', 'error'); return; }
-      if (price <= 0) { showToast('⚠ Enter a valid price', 'error'); return; }
-      const name = sel.options[sel.selectedIndex].dataset.name;
-      const existing = cart.find(i => i.product_id === sel.value);
-      if (existing) { existing.quantity += qty; existing.subtotal = existing.quantity * existing.unit_price; showToast('✓ Quantity updated'); }
-      else { cart.push({ product_id: sel.value, product_name: name, quantity: qty, unit_price: price, subtotal: qty * price }); showToast('✓ Added: ' + name); }
+
+      if (!sel.value) {
+        showToast('⚠ Please select a product from the list', 'error');
+        sel.focus();
+        return false;
+      }
+      if (qty <= 0) {
+        showToast('⚠ Quantity must be at least 1', 'error');
+        document.getElementById('qty').focus();
+        return false;
+      }
+      if (price <= 0) {
+        showToast('⚠ Enter a valid selling price', 'error');
+        document.getElementById('price').focus();
+        return false;
+      }
+
+      const opt = sel.options[sel.selectedIndex];
+      const name = opt.dataset.name || opt.textContent;
+      const availableStock = parseInt(opt.dataset.stock) || 0;
+
+      const existing = cart.find(i => String(i.product_id) === String(sel.value));
+      const totalQty = (existing ? existing.quantity : 0) + qty;
+
+      if (availableStock > 0 && totalQty > availableStock) {
+        showToast(`⚠ Insufficient stock: Only ${availableStock} available!`, 'error');
+        return false;
+      }
+
+      if (existing) {
+        existing.quantity += qty;
+        existing.qty = existing.quantity;
+        existing.subtotal = existing.quantity * existing.unit_price;
+        showToast('✓ Quantity updated for ' + name);
+      } else {
+        cart.push({
+          product_id: sel.value,
+          id: sel.value,
+          product_name: name,
+          quantity: qty,
+          qty: qty,
+          unit_price: price,
+          price: price,
+          subtotal: qty * price
+        });
+        showToast('✓ Added to cart: ' + name);
+      }
+
       document.getElementById('qty').value = 1;
       renderCart();
+      return true;
     }
 
     function renderCart() {
-      const tb = document.getElementById('cartBody'); let total = 0;
-      if (cart.length === 0) { tb.innerHTML = '<tr class="empty-row"><td colspan="6">🧾 No items yet</td></tr>'; }
-      else {
+      const tb = document.getElementById('cartBody');
+      let total = 0;
+      if (cart.length === 0) {
+        tb.innerHTML = '<tr class="empty-row"><td colspan="6">🧾 No items yet — choose product and click ＋ Add</td></tr>';
+      } else {
         tb.innerHTML = '';
         cart.forEach((it, i) => {
           total += it.subtotal;
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td><strong>${i + 1}</strong></td><td>${it.product_name}</td><td><span class="badge badge-orange">${it.quantity}</span></td><td>${Number(it.unit_price).toLocaleString()}</td><td><strong style="color:#c62828;">${Number(it.subtotal).toLocaleString()}</strong></td><td><button class="remove-btn" onclick="removeItem(${i})">✕</button></td>`;
+          tr.innerHTML = `
+            <td><strong>${i + 1}</strong></td>
+            <td><strong>${it.product_name}</strong></td>
+            <td><span class="badge badge-orange">${it.quantity}</span></td>
+            <td>${Number(it.unit_price).toLocaleString()}</td>
+            <td><strong style="color:#c62828;">${Number(it.subtotal).toLocaleString()}</strong></td>
+            <td><button class="remove-btn" onclick="removeItem(${i})">✕ Remove</button></td>
+          `;
           tb.appendChild(tr);
         });
       }
@@ -780,23 +852,54 @@
       document.getElementById('heroTotal').textContent = total > 999 ? (total / 1000).toFixed(0) + 'K' : fmt;
       const cust = document.getElementById('customer').value.trim();
       document.getElementById('summaryCustomer').textContent = cust || 'Walk-in';
-      document.getElementById('recordBtn').disabled = cart.length === 0;
     }
 
-    function removeItem(i) { const name = cart[i].product_name; cart.splice(i, 1); renderCart(); showToast('Removed: ' + name); }
+    function removeItem(i) {
+      const name = cart[i].product_name;
+      cart.splice(i, 1);
+      renderCart();
+      showToast('Removed: ' + name);
+    }
 
     async function recordSale() {
-      if (cart.length === 0) { showToast('⚠ Add items first', 'error'); return; }
+      // If user hasn't clicked "+ Add", but has filled the product form, auto-add it!
+      if (cart.length === 0) {
+        const sel = document.getElementById('productSelect');
+        const price = parseFloat(document.getElementById('price').value) || 0;
+        if (sel.value && price > 0) {
+          const added = addToList();
+          if (!added) return;
+        } else {
+          showToast('⚠ Please select a product and click ＋ Add first', 'error');
+          sel.focus();
+          return;
+        }
+      }
+
       const customer_name = document.getElementById('customer').value.trim() || 'Walk-in Customer';
-      const btn = document.getElementById('recordBtn'); btn.disabled = true; btn.textContent = '⏳ Recording...';
+      const btn = document.getElementById('recordBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Recording sale...';
+
       try {
-        const res = await api('/api/sales', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customer_name, items: cart }) });
+        const res = await api('/api/sales', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ customer_name, items: cart })
+        });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || data.message || 'Server error ' + res.status);
         showToast('✅ Sale recorded! Stock updated.');
-        cart = []; renderCart(); loadHistory(); loadProducts();
-      } catch (e) { showToast('❌ Error: ' + e.message, 'error'); }
-      finally { btn.disabled = false; btn.innerHTML = '✓ &nbsp;RECORD SALE &amp; UPDATE STOCK'; }
+        cart = [];
+        renderCart();
+        loadHistory();
+        loadProducts();
+      } catch (e) {
+        showToast('❌ Error: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '✓ &nbsp;RECORD SALE &amp; UPDATE STOCK';
+      }
     }
 
     async function loadHistory() {
@@ -805,21 +908,50 @@
         const j = await r.json();
         const data = Array.isArray(j) ? j : (j.sales || j.data || []);
         const tb = document.getElementById('historyBody');
-        if (data.length === 0) { tb.innerHTML = '<tr class="empty-row"><td colspan="6">No sales yet</td></tr>'; return; }
+        if (data.length === 0) {
+          tb.innerHTML = '<tr class="empty-row"><td colspan="6">No sales recorded yet</td></tr>';
+          return;
+        }
         tb.innerHTML = '';
         data.forEach((s, idx) => {
           const date = s.sale_date || s.created_at;
           const dateStr = date ? new Date(date).toLocaleDateString('en-UG', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td>${data.length - idx}</td><td><strong>${s.sale_no || ('SAL-' + s.id)}</strong></td><td>${s.customer_name || 'Walk-in'}</td><td><strong>UGX ${Number(s.total_amount || 0).toLocaleString()}</strong></td><td>${dateStr}</td><td><span class="badge badge-green">✓ Sold</span></td>`;
+          tr.innerHTML = `
+            <td>${data.length - idx}</td>
+            <td><strong>${s.sale_no || ('SAL-' + s.id)}</strong></td>
+            <td>${s.customer_name || 'Walk-in'}</td>
+            <td><strong>UGX ${Number(s.total_amount || 0).toLocaleString()}</strong></td>
+            <td>${dateStr}</td>
+            <td><span class="badge badge-green">✓ Sold</span></td>
+          `;
           tb.appendChild(tr);
         });
-      } catch (e) { document.getElementById('historyBody').innerHTML = '<tr class="empty-row"><td colspan="6">Could not load history</td></tr>'; }
+      } catch (e) {
+        document.getElementById('historyBody').innerHTML = '<tr class="empty-row"><td colspan="6">Could not load history</td></tr>';
+      }
     }
+
+    // Allow Enter key to quickly add to list
+    ['qty', 'price'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('keydown', e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addToList();
+          }
+        });
+      }
+    });
 
     document.getElementById('customer').addEventListener('input', renderCart);
 
-    checkAuth().then(() => { loadProducts(); loadHistory(); renderCart(); });
+    checkAuth().then(() => {
+      loadProducts();
+      loadHistory();
+      renderCart();
+    });
   </script>
 </body>
 

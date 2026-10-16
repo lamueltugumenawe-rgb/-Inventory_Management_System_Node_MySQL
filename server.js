@@ -242,16 +242,20 @@ app.post('/api/purchases', requireRole(['manager','storekeeper','admin']), async
   const conn = await pool.getConnection();
   try{
     await conn.beginTransaction();
-    const {supplier_id, items} = req.body;
-    if(!items || !Array.isArray(items) || items.length === 0) throw new Error('No items provided');
-    if(!supplier_id) throw new Error('Supplier is required');
+    const items = req.body.items || req.body.products || [];
+    let supplier_id = req.body.supplier_id || req.body.supplier;
+    if(!items || !Array.isArray(items) || items.length === 0) throw new Error('Please add at least one product to the purchase cart');
+    if(!supplier_id) {
+      const [sups] = await conn.query('SELECT id FROM suppliers LIMIT 1');
+      if(sups.length > 0) supplier_id = sups[0].id;
+      else throw new Error('No suppliers found. Please add a supplier first.');
+    }
     const recordedBy = req.session.user ? req.session.user.id : null;
     const purchase_no = 'PUR'+Date.now();
-    // Support both field name conventions: qty/cost (from client) or quantity/unit_cost
     let total=0;
     items.forEach(i=>{
-      const qty = parseInt(i.qty || i.quantity) || 0;
-      const cost = parseFloat(i.cost || i.unit_cost) || 0;
+      const qty = parseInt(i.qty || i.quantity || 1);
+      const cost = parseFloat(i.cost || i.unit_cost || 0);
       total += qty * cost;
     });
     const [pRes] = await conn.query(
@@ -260,14 +264,14 @@ app.post('/api/purchases', requireRole(['manager','storekeeper','admin']), async
     );
     const purchase_id = pRes.insertId;
     for(let it of items){
-      const qty = parseInt(it.qty || it.quantity) || 0;
-      const cost = parseFloat(it.cost || it.unit_cost) || 0;
-      const product_id = it.product_id;
+      const qty = parseInt(it.qty || it.quantity || 1);
+      const cost = parseFloat(it.cost || it.unit_cost || 0);
+      const product_id = it.product_id || it.id;
       await conn.query(
         'INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?,?,?,?,?)',
         [purchase_id, product_id, qty, cost, qty*cost]
       );
-      const [prodRows] = await conn.query('SELECT current_stock FROM products WHERE id=? FOR UPDATE', [product_id]);
+      const [prodRows] = await conn.query('SELECT current_stock, product_name FROM products WHERE id=? FOR UPDATE', [product_id]);
       if(prodRows.length === 0) throw new Error('Product not found: '+product_id);
       const before = prodRows[0].current_stock;
       const after = before + qty;
@@ -294,27 +298,45 @@ app.post('/api/sales', requireRole(['manager','salesperson','admin']), async (re
   const conn = await pool.getConnection();
   try{
     await conn.beginTransaction();
-    const {items, customer_name} = req.body;
+    const items = req.body.items || req.body.products || [];
+    const customer_name = req.body.customer_name || req.body.customer || 'Walk-in';
+    if(!items || !Array.isArray(items) || items.length === 0) {
+      throw new Error('Please add at least one product to the sale cart');
+    }
+    const soldBy = req.session.user ? req.session.user.id : null;
     let total=0;
     for(let it of items){
-      const [prod] = await conn.query('SELECT current_stock FROM products WHERE id=? FOR UPDATE', [it.product_id]);
-      if(prod[0].current_stock < parseInt(it.quantity)) throw new Error('Insufficient stock. Available '+prod[0].current_stock);
-      total+= parseInt(it.quantity)*parseFloat(it.unit_price);
+      const qty = parseInt(it.quantity || it.qty || 1);
+      const price = parseFloat(it.unit_price || it.price || it.selling_price || 0);
+      const product_id = it.product_id || it.id;
+      const [prod] = await conn.query('SELECT current_stock, product_name FROM products WHERE id=? FOR UPDATE', [product_id]);
+      if(prod.length === 0) throw new Error('Product not found: ' + product_id);
+      if(prod[0].current_stock < qty) {
+        throw new Error(`Insufficient stock for ${prod[0].product_name || 'item'}. Available: ${prod[0].current_stock}, requested: ${qty}`);
+      }
+      total += qty * price;
     }
     const sale_no = 'SAL'+Date.now();
-    const [sRes] = await conn.query('INSERT INTO sales (sale_no, total_amount, sold_by, customer_name) VALUES (?,?,?,?)', [sale_no, total, req.session.user.id, customer_name||'Walk-in']);
+    const [sRes] = await conn.query('INSERT INTO sales (sale_no, total_amount, sold_by, customer_name) VALUES (?,?,?,?)', [sale_no, total, soldBy, customer_name]);
     const sale_id = sRes.insertId;
     for(let it of items){
-      const qty = parseInt(it.quantity);
-      const [prodRows] = await conn.query('SELECT current_stock FROM products WHERE id=?', [it.product_id]);
-      const before = prodRows[0].current_stock; const after = before - qty;
-      await conn.query('INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, subtotal) VALUES (?,?,?,?,?)', [sale_id, it.product_id, qty, it.unit_price, qty*it.unit_price]);
-      await conn.query('UPDATE products SET current_stock=? WHERE id=?', [after, it.product_id]);
-      await conn.query('INSERT INTO stock_movements (product_id, movement_type, quantity_change, quantity_before, quantity_after, reference_no, moved_by) VALUES (?,?,?,?,?,?,?)', [it.product_id,'sale',-qty,before,after,sale_no,req.session.user.id]);
+      const qty = parseInt(it.quantity || it.qty || 1);
+      const price = parseFloat(it.unit_price || it.price || it.selling_price || 0);
+      const product_id = it.product_id || it.id;
+      const [prodRows] = await conn.query('SELECT current_stock FROM products WHERE id=?', [product_id]);
+      const before = prodRows[0].current_stock;
+      const after = before - qty;
+      await conn.query('INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, subtotal) VALUES (?,?,?,?,?)', [sale_id, product_id, qty, price, qty*price]);
+      await conn.query('UPDATE products SET current_stock=? WHERE id=?', [after, product_id]);
+      await conn.query('INSERT INTO stock_movements (product_id, movement_type, quantity_change, quantity_before, quantity_after, reference_no, moved_by) VALUES (?,?,?,?,?,?,?)', [product_id,'sale',-qty,before,after,sale_no,soldBy]);
     }
     await conn.commit();
-    res.json({message:'Sale completed', sale_no, total});
-  }catch(e){ await conn.rollback(); res.status(400).json({error:e.message}); }finally{ conn.release(); }
+    res.json({message:'Sale completed successfully', sale_no, total});
+  }catch(e){
+    await conn.rollback();
+    console.error('Sale error:', e.message);
+    res.status(400).json({error: e.message || 'Failed to record sale'});
+  }finally{ conn.release(); }
 });
 
 app.get('/api/reports/dashboard', requireLogin, async (req,res)=>{
