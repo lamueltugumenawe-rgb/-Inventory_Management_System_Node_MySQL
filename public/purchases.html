@@ -486,6 +486,7 @@
 
 <script>
   let cart = [];
+  try { cart = JSON.parse(sessionStorage.getItem('kigezi_purchase_cart') || '[]'); } catch(e) { cart = []; }
 
   // ── AUTH ──────────────────────────────────────────────
   async function checkAuth() {
@@ -670,6 +671,7 @@
     const supSel = document.getElementById('supplierSelect');
     const supOpt = (supSel && supSel.selectedIndex >= 0) ? supSel.options[supSel.selectedIndex] : null;
     document.getElementById('summarySupplier').textContent = (supOpt && supOpt.value) ? supOpt.textContent : '—';
+    try { sessionStorage.setItem('kigezi_purchase_cart', JSON.stringify(cart)); } catch(e) {}
   }
 
   function removeItem(i) {
@@ -725,6 +727,7 @@
 
       showToast('✅ ' + (data.message || 'Purchase recorded! Stock updated.'));
       cart = [];
+      try { sessionStorage.removeItem('kigezi_purchase_cart'); } catch(e) {}
       renderCart();
       loadHistory();
       loadProducts();

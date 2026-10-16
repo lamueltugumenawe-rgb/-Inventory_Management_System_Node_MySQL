@@ -703,8 +703,8 @@
 
   <div id="toast"></div>
 
-  <script>
     let cart = [];
+    try { cart = JSON.parse(sessionStorage.getItem('kigezi_sale_cart') || '[]'); } catch(e) { cart = []; }
 
     async function checkAuth() {
       const r = await fetch('/api/me', { credentials: 'include' });
@@ -852,6 +852,7 @@
       document.getElementById('heroTotal').textContent = total > 999 ? (total / 1000).toFixed(0) + 'K' : fmt;
       const cust = document.getElementById('customer').value.trim();
       document.getElementById('summaryCustomer').textContent = cust || 'Walk-in';
+      try { sessionStorage.setItem('kigezi_sale_cart', JSON.stringify(cart)); } catch(e) {}
     }
 
     function removeItem(i) {
@@ -891,6 +892,7 @@
         if (!res.ok) throw new Error(data.error || data.message || 'Server error ' + res.status);
         showToast('✅ Sale recorded! Stock updated.');
         cart = [];
+        try { sessionStorage.removeItem('kigezi_sale_cart'); } catch(e) {}
         renderCart();
         loadHistory();
         loadProducts();
