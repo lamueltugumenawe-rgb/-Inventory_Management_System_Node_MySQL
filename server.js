@@ -166,9 +166,44 @@ app.get('/api/suppliers', requireLogin, async (req,res)=>{
 });
 app.post('/api/suppliers', requireRole(['manager','storekeeper','admin']), async (req,res)=>{
   try{
-    const {supplier_code, supplier_name, contact_person, phone, email, address} = req.body;
-    const [result] = await pool.query('INSERT INTO suppliers (supplier_code, supplier_name, contact_person, phone, email, address) VALUES (?,?,?,?,?,?)', [supplier_code, supplier_name, contact_person, phone, email, address]);
-    res.json({message:'Supplier added'});
+    let {supplier_code, code, supplier_name, name, contact_person, contact, phone, email, address} = req.body;
+    supplier_name = supplier_name || name;
+    contact_person = contact_person || contact;
+    phone = phone || contact;
+    supplier_code = supplier_code || code || ('SUP' + Date.now());
+    if(!supplier_name) return res.status(400).json({error: 'Supplier name is required'});
+    const [result] = await pool.query(
+      'INSERT INTO suppliers (supplier_code, supplier_name, contact_person, phone, email, address) VALUES (?,?,?,?,?,?)',
+      [supplier_code, supplier_name, contact_person || '', phone || '', email || '', address || '']
+    );
+    res.json({message:'Supplier added successfully', id: result.insertId});
+  }catch(e){ res.status(400).json({error:e.message}); }
+});
+
+app.put('/api/suppliers/:id', requireRole(['manager','storekeeper','admin']), async (req,res)=>{
+  try{
+    let {supplier_code, code, supplier_name, name, contact_person, contact, phone, email, address} = req.body;
+    supplier_name = supplier_name || name;
+    contact_person = contact_person || contact;
+    phone = phone || contact;
+    supplier_code = supplier_code || code;
+    if(!supplier_name) return res.status(400).json({error: 'Supplier name is required'});
+    await pool.query(
+      'UPDATE suppliers SET supplier_code=?, supplier_name=?, contact_person=?, phone=?, email=?, address=? WHERE id=?',
+      [supplier_code, supplier_name, contact_person || '', phone || '', email || '', address || '', req.params.id]
+    );
+    res.json({message:'Supplier updated successfully'});
+  }catch(e){ res.status(400).json({error:e.message}); }
+});
+
+app.delete('/api/suppliers/:id', requireRole(['manager','admin']), async (req,res)=>{
+  try{
+    const [purchases] = await pool.query('SELECT COUNT(*) as c FROM purchases WHERE supplier_id=?', [req.params.id]);
+    if(purchases[0].c > 0) {
+      return res.status(400).json({error: `Cannot delete: supplier has ${purchases[0].c} recorded purchase(s).`});
+    }
+    await pool.query('DELETE FROM suppliers WHERE id=?', [req.params.id]);
+    res.json({message:'Supplier deleted successfully'});
   }catch(e){ res.status(400).json({error:e.message}); }
 });
 

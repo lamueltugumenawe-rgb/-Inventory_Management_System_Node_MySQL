@@ -1,29 +1,962 @@
-<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Suppliers - Kigezi Traders</title><style>body{font-family:Arial;padding:20px;background:#f5f5f5}.nav{background:#2e7d32;padding:15px;margin:-20px -20px 20px -20px}.nav a{color:white;margin-right:15px;text-decoration:none;font-weight:bold}.card{background:white;padding:20px;border-radius:8px}input{padding:10px;margin:5px;border:1px solid #ccc;border-radius:4px}button{padding:10px 15px;background:#2e7d32;color:white;border:none;border-radius:4px;cursor:pointer}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{border:1px solid #ddd;padding:10px}th{background:#2e7d32;color:white}</style></head><body>
-<div class="nav"><a href="/dashboard.html">Dashboard</a><a href="/products.html">Products</a><a href="/suppliers.html">Suppliers</a><a href="/purchases.html">Purchases</a><a href="/sales.html">Sales</a></div>
-<div class="card"><h2>Suppliers</h2><input id="name" placeholder="Supplier Name"><input id="contact" placeholder="Contact"><input id="email" placeholder="Email"><button onclick="addSupplier()">Add Supplier</button><table><thead><tr><th>ID</th><th>Name</th><th>Contact</th><th>Email</th><th>Action</th></tr></thead><tbody id="list"></tbody></table></div>
-<script>
-function getToken(){return localStorage.getItem('token')||localStorage.getItem('authToken')||localStorage.getItem('jwt')||''}
-function headers(){const h={'Content-Type':'application/json'};const t=getToken();if(t)h['Authorization']='Bearer '+t;return h;}
-async function loadSuppliers(){
- const res=await fetch('/api/suppliers',{headers:headers()});
- const json=await res.json();
- const data=Array.isArray(json)?json:(json.suppliers||json.data||json.rows||[]);
- const tbody=document.getElementById('list');tbody.innerHTML='';
- if(data.length===0){tbody.innerHTML='<tr><td colspan=5>No suppliers yet</td></tr>';return;}
- data.forEach(s=>{tbody.innerHTML+=`<tr><td>${s.id}</td><td>${s.name||s.supplier_name||''}</td><td>${s.contact_person||s.contact||s.phone||''}</td><td>${s.email||''}</td><td><button onclick="deleteSup(${s.id})">Delete</button></td></tr>`;});
-}
-async function addSupplier(){
- const name=document.getElementById('name').value.trim();
- const contact=document.getElementById('contact').value.trim();
- const email=document.getElementById('email').value.trim();
- if(!name)return alert('Name required');
- const supplier_code='SUP'+Date.now();
- const res=await fetch('/api/suppliers',{method:'POST',headers:headers(),body:JSON.stringify({name,supplier_name:name,contact_person:contact,contact:contact,phone:contact,email,supplier_code,code:supplier_code})});
- const txt=await res.text();console.log(txt);
- if(!res.ok){alert('Failed: '+txt);return;}
- document.getElementById('name').value='';document.getElementById('contact').value='';document.getElementById('email').value='';
- loadSuppliers();
-}
-async function deleteSup(id){if(!confirm('Delete?'))return;await fetch('/api/suppliers/'+id,{method:'DELETE',headers:headers()});loadSuppliers();}
-loadSuppliers();
-</script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Suppliers – Kigezi Traders</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --green-dk: #1b5e20;
+      --green-md: #2e7d32;
+      --green-lt: #388e3c;
+      --green-pale: #e8f5e9;
+      --green-pale2: #c8e6c9;
+      --accent-orange: #f57c00;
+      --accent-red: #d32f2f;
+      --accent-blue: #1976d2;
+      --text: #1a2332;
+      --text-muted: #5f6e80;
+      --border: #dde5ed;
+      --page: #f4f7fa;
+      --white: #ffffff;
+      --shadow-sm: 0 2px 8px rgba(27, 94, 32, .06);
+      --shadow-md: 0 6px 20px rgba(27, 94, 32, .1);
+      --radius: 14px;
+      --radius-sm: 8px;
+    }
+
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--page);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    /* ── TOPBAR ── */
+    .topbar {
+      background: linear-gradient(135deg, var(--green-dk) 0%, var(--green-md) 100%);
+      color: white;
+      padding: 0 clamp(16px, 4vw, 40px);
+      height: 68px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 4px 20px rgba(27, 94, 32, .35);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .topbar-brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, .15);
+      border: 1px solid rgba(255, 255, 255, .25);
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+    }
+    .brand-name {
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: .2px;
+    }
+    .brand-sub {
+      font-size: 11px;
+      color: #a5d6a7;
+      font-weight: 500;
+    }
+    .topbar-user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .user-badge {
+      background: rgba(255, 255, 255, .12);
+      border: 1px solid rgba(255, 255, 255, .2);
+      border-radius: 20px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: .2px;
+    }
+    .btn-logout {
+      background: rgba(255, 255, 255, .1);
+      border: 1px solid rgba(255, 255, 255, .2);
+      color: white;
+      padding: 7px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background .2s;
+    }
+    .btn-logout:hover {
+      background: rgba(255, 255, 255, .22);
+    }
+
+    /* ── NAV ── */
+    .nav {
+      background: var(--green-md);
+      padding: 0 clamp(16px, 4vw, 40px);
+      display: flex;
+      gap: 4px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .nav::-webkit-scrollbar { display: none; }
+    .nav a {
+      color: #c8e6c9;
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 12px 18px;
+      border-bottom: 3px solid transparent;
+      white-space: nowrap;
+      transition: all .2s;
+    }
+    .nav a:hover {
+      color: white;
+    }
+    .nav a.active {
+      color: white;
+      border-bottom-color: #a5d6a7;
+    }
+
+    /* ── HERO SECTION ── */
+    .page-hero {
+      background: linear-gradient(135deg, var(--green-dk) 0%, #1e5a22 60%, #143d17 100%);
+      color: white;
+      padding: 28px clamp(16px, 4vw, 40px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .page-hero h1 {
+      font-size: 24px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .page-hero p {
+      font-size: 13px;
+      color: #c8e6c9;
+      margin-top: 4px;
+    }
+    .hero-stats {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .hero-stat {
+      background: rgba(255, 255, 255, .1);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, .18);
+      border-radius: 12px;
+      padding: 12px 22px;
+      text-align: center;
+      min-width: 110px;
+    }
+    .hero-stat .num {
+      font-size: 26px;
+      font-weight: 800;
+    }
+    .hero-stat .lbl {
+      font-size: 10px;
+      color: #a5d6a7;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      margin-top: 2px;
+    }
+
+    /* ── CONTAINER ── */
+    .container {
+      max-width: 1320px;
+      margin: 28px auto;
+      padding: 0 clamp(12px, 3vw, 32px);
+    }
+
+    /* ── CARDS ── */
+    .card {
+      background: var(--white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      border: 1px solid var(--border);
+      margin-bottom: 26px;
+      overflow: hidden;
+      transition: box-shadow .2s ease;
+    }
+    .card:hover {
+      box-shadow: var(--shadow-md);
+    }
+    .card-header {
+      background: linear-gradient(90deg, #f3f9f3 0%, #ffffff 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .card-title-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .card-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 10px;
+      background: var(--green-dk);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-size: 18px;
+    }
+    .card-header h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--green-dk);
+    }
+    .card-header p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 1px;
+    }
+    .card-body {
+      padding: 24px;
+    }
+
+    /* ── FORM GRID ── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 18px;
+      align-items: end;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .field label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: .6px;
+    }
+    .field input {
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--text);
+      background: var(--white);
+      outline: none;
+      transition: all .2s;
+    }
+    .field input:focus {
+      border-color: var(--green-md);
+      box-shadow: 0 0 0 3px rgba(46, 125, 50, .14);
+    }
+
+    /* ── BUTTONS ── */
+    .btn-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: 20px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 700;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all .2s;
+      white-space: nowrap;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--green-dk) 0%, var(--green-md) 100%);
+      color: white;
+      box-shadow: 0 4px 14px rgba(27, 94, 32, .25);
+    }
+    .btn-primary:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 18px rgba(27, 94, 32, .35);
+    }
+    .btn-secondary {
+      background: #eceff1;
+      color: #37474f;
+    }
+    .btn-secondary:hover {
+      background: #cfd8dc;
+    }
+    .btn-auto {
+      background: #f1f8e9;
+      color: var(--green-dk);
+      border: 1px solid var(--green-pale2);
+      padding: 4px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-left: 6px;
+    }
+    .btn-auto:hover {
+      background: var(--green-pale2);
+    }
+
+    /* Table Action Buttons */
+    .btn-action-edit {
+      background: #fff3e0;
+      color: #e65100;
+      border: 1px solid #ffe0b2;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .15s;
+    }
+    .btn-action-edit:hover {
+      background: #ffe0b2;
+      transform: translateY(-1px);
+    }
+    .btn-action-del {
+      background: #ffebee;
+      color: #c62828;
+      border: 1px solid #ffcdd2;
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all .15s;
+      margin-left: 6px;
+    }
+    .btn-action-del:hover {
+      background: #ffcdd2;
+      transform: translateY(-1px);
+    }
+
+    /* ── FILTER TOOLBAR ── */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-bottom: 16px;
+    }
+    .search-input-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 280px;
+    }
+    .search-input-wrap input {
+      width: 100%;
+      padding: 10px 14px 10px 38px;
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .search-input-wrap input:focus {
+      border-color: var(--green-md);
+      box-shadow: 0 0 0 3px rgba(46, 125, 50, .1);
+    }
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 15px;
+      color: var(--text-muted);
+    }
+
+    /* ── TABLE ── */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      white-space: nowrap;
+      text-align: left;
+    }
+    thead th {
+      background: var(--green-pale);
+      color: var(--green-dk);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .7px;
+      padding: 13px 16px;
+      border-bottom: 1px solid var(--green-pale2);
+    }
+    tbody td {
+      padding: 13px 16px;
+      border-bottom: 1px solid #f0f4f0;
+      color: var(--text);
+    }
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+    tbody tr:hover {
+      background: #f8fff8;
+    }
+    .empty-row td {
+      text-align: center;
+      padding: 36px 16px !important;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    /* ── BADGES & LINKS ── */
+    .badge-code {
+      background: #eceff1;
+      color: #37474f;
+      font-family: ui-monospace, monospace;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid #cfd8dc;
+      font-size: 11px;
+    }
+    .badge-supplier {
+      background: #e8f5e9;
+      color: #1b5e20;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .contact-link {
+      color: var(--green-dk);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .contact-link:hover {
+      text-decoration: underline;
+    }
+
+    /* ── TOAST NOTIFICATION ── */
+    #toast {
+      position: fixed;
+      top: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(-100px);
+      background: #1b3a1b;
+      color: white;
+      padding: 14px 28px;
+      border-radius: 50px;
+      font-size: 14px;
+      font-weight: 700;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, .35);
+      transition: transform .35s cubic-bezier(.34, 1.56, .64, 1);
+      z-index: 999999;
+      max-width: 90vw;
+      text-align: center;
+    }
+    #toast.show {
+      transform: translateX(-50%) translateY(0);
+    }
+    #toast.success {
+      background: #1b5e20;
+    }
+    #toast.error {
+      background: #c62828;
+    }
+
+    .card.editing-mode {
+      border: 2px solid var(--accent-orange);
+      box-shadow: 0 0 0 4px rgba(245, 124, 0, .12);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="topbar-brand">
+      <div class="brand-icon">🌿</div>
+      <div>
+        <div class="brand-name">Kigezi Traders</div>
+        <div class="brand-sub">Inventory Management System</div>
+      </div>
+    </div>
+    <div class="topbar-user">
+      <div class="user-badge" id="userBadge">Loading...</div>
+      <button class="btn-logout" onclick="logout()">⬤ Logout</button>
+    </div>
+  </div>
+
+  <!-- NAV -->
+  <nav class="nav">
+    <a href="/dashboard.html">Dashboard</a>
+    <a href="/index.html">Products</a>
+    <a href="/suppliers.html" class="active">Suppliers</a>
+    <a href="/purchases.html">Purchases</a>
+    <a href="/sales.html">Sales</a>
+    <a href="/reports.html">Reports</a>
+  </nav>
+
+  <!-- HERO SECTION -->
+  <div class="page-hero">
+    <div>
+      <h1>🏭 Suppliers &amp; Vendor Directory</h1>
+      <p>Register procurement suppliers, manage vendor contact persons, phone numbers, and locations</p>
+    </div>
+    <div class="hero-stats">
+      <div class="hero-stat">
+        <div class="num" id="statSuppliers">0</div>
+        <div class="lbl">Total Suppliers</div>
+      </div>
+      <div class="hero-stat">
+        <div class="num" id="statWithContact" style="color:#c8e6c9;">0</div>
+        <div class="lbl">With Contact</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTAINER -->
+  <div class="container">
+
+    <!-- ADD / EDIT SUPPLIER CARD -->
+    <div class="card" id="formCard">
+      <div class="card-header">
+        <div class="card-title-group">
+          <div class="card-icon" id="formIcon">➕</div>
+          <div>
+            <h3 id="formTitle">Register New Supplier</h3>
+            <p id="formSub">Add vendor details, contact person, phone number, and location</p>
+          </div>
+        </div>
+        <div id="editingBadge" style="display:none;">
+          <span class="badge" style="background:#fff3e0;color:#e65100;font-size:12px;padding:6px 14px;border-radius:20px;font-weight:700;">
+            ✏️ Editing Mode Active
+          </span>
+        </div>
+      </div>
+      <div class="card-body">
+        <input type="hidden" id="editId">
+
+        <div class="form-grid">
+          <!-- Supplier Code -->
+          <div class="field">
+            <label>
+              Supplier Code
+              <button type="button" class="btn-auto" onclick="generateCode()" title="Auto-generate code">⚡ Auto</button>
+            </label>
+            <input id="code" type="text" placeholder="e.g. SUP-006 or SUP01">
+          </div>
+
+          <!-- Supplier Name -->
+          <div class="field">
+            <label>Supplier / Company Name *</label>
+            <input id="name" type="text" placeholder="e.g. Kigezi Grain Millers Ltd" required>
+          </div>
+
+          <!-- Contact Person -->
+          <div class="field">
+            <label>Contact Person</label>
+            <input id="contact" type="text" placeholder="e.g. Mr. Mwesigye Jackson">
+          </div>
+
+          <!-- Phone -->
+          <div class="field">
+            <label>Phone / Mobile</label>
+            <input id="phone" type="tel" placeholder="e.g. 0772123456">
+          </div>
+
+          <!-- Email -->
+          <div class="field">
+            <label>Email Address</label>
+            <input id="email" type="email" placeholder="e.g. sales@kigezigrains.com">
+          </div>
+
+          <!-- Address -->
+          <div class="field">
+            <label>Physical Address / Town</label>
+            <input id="address" type="text" placeholder="e.g. Kabale Town, Garage Street">
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="btn-actions">
+          <button class="btn btn-primary" id="mainBtn" onclick="saveSupplier()">
+            <span>＋</span> <span id="mainBtnText">Add Supplier</span>
+          </button>
+          <button class="btn btn-secondary" id="cancelBtn" onclick="resetForm()" style="display:none;">
+            ✕ Cancel Edit
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SUPPLIERS DIRECTORY TABLE CARD -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title-group">
+          <div class="card-icon" style="background:#2e7d32;">📋</div>
+          <div>
+            <h3>Registered Vendors Directory</h3>
+            <p>All approved suppliers available for purchases and stock replenishment</p>
+          </div>
+        </div>
+        <div>
+          <span class="badge-code" id="tableCountBadge">0 Suppliers Listed</span>
+        </div>
+      </div>
+      <div class="card-body">
+
+        <!-- Search Toolbar -->
+        <div class="filter-bar">
+          <div class="search-input-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="searchInput" placeholder="Search by supplier name, code, contact person, or phone..." oninput="applyFilters()">
+          </div>
+        </div>
+
+        <!-- Table -->
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Supplier Code</th>
+                <th>Company / Name</th>
+                <th>Contact Person</th>
+                <th>Phone / Mobile</th>
+                <th>Email</th>
+                <th>Location / Address</th>
+                <th style="text-align:right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="tbl">
+              <tr class="empty-row">
+                <td colspan="8">⏳ Loading suppliers directory...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div id="toast"></div>
+
+  <script>
+    let suppliers = [];
+    let filteredSuppliers = [];
+
+    // ── AUTH ──────────────────────────────────────────────
+    async function checkAuth() {
+      try {
+        const r = await fetch('/api/me', { credentials: 'include' });
+        const d = await r.json();
+        if (!d.user) { location.href = '/login.html'; return; }
+        document.getElementById('userBadge').textContent = d.user.full_name + ' · ' + d.user.role;
+      } catch(e) {
+        location.href = '/login.html';
+      }
+    }
+
+    function logout() {
+      fetch('/api/logout', { method: 'POST', credentials: 'include' })
+        .finally(() => { localStorage.clear(); location.href = '/login.html'; });
+    }
+
+    async function api(url, opts = {}) {
+      return fetch(url, { credentials: 'include', ...opts });
+    }
+
+    // ── TOAST ─────────────────────────────────────────────
+    let toastTimer;
+    function showToast(msg, type = 'success') {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.className = 'show ' + type;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.className = '', 4000);
+    }
+
+    // ── AUTO GENERATE CODE ───────────────────────────────
+    function generateCode() {
+      const name = document.getElementById('name').value.trim();
+      let prefix = 'SUP';
+      if (name.length >= 2) {
+        prefix = 'SUP-' + name.substring(0, 3).toUpperCase();
+      }
+      const rand = Math.floor(100 + Math.random() * 900);
+      document.getElementById('code').value = `${prefix}-${rand}`;
+    }
+
+    // ── LOAD SUPPLIERS ────────────────────────────────────
+    async function loadSuppliers() {
+      try {
+        const r = await api('/api/suppliers');
+        const j = await r.json();
+        suppliers = Array.isArray(j) ? j : (j.suppliers || j.data || []);
+        updateStats();
+        applyFilters();
+      } catch (e) {
+        console.error('Load suppliers error:', e);
+        showToast('❌ Failed to load suppliers', 'error');
+      }
+    }
+
+    // ── HERO STATS ────────────────────────────────────────
+    function updateStats() {
+      const withContact = suppliers.filter(s => s.phone || s.contact_person || s.contact).length;
+      document.getElementById('statSuppliers').textContent = suppliers.length;
+      document.getElementById('statWithContact').textContent = withContact;
+    }
+
+    // ── APPLY FILTERS ─────────────────────────────────────
+    function applyFilters() {
+      const q = document.getElementById('searchInput').value.toLowerCase().trim();
+
+      filteredSuppliers = suppliers.filter(s => {
+        const name = (s.supplier_name || s.name || '').toLowerCase();
+        const code = (s.supplier_code || '').toLowerCase();
+        const contact = (s.contact_person || s.contact || '').toLowerCase();
+        const phone = (s.phone || '').toLowerCase();
+        const email = (s.email || '').toLowerCase();
+
+        return !q || name.includes(q) || code.includes(q) || contact.includes(q) || phone.includes(q) || email.includes(q);
+      });
+
+      renderTable();
+    }
+
+    // ── RENDER TABLE ──────────────────────────────────────
+    function renderTable() {
+      const tbody = document.getElementById('tbl');
+      document.getElementById('tableCountBadge').textContent = `${filteredSuppliers.length} of ${suppliers.length} Suppliers`;
+
+      if (filteredSuppliers.length === 0) {
+        tbody.innerHTML = `
+          <tr class="empty-row">
+            <td colspan="8">🔍 No suppliers match your search.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = '';
+      filteredSuppliers.forEach((s, idx) => {
+        const code = s.supplier_code || `SUP-${s.id}`;
+        const name = s.supplier_name || s.name || 'Unnamed';
+        const contact = s.contact_person || s.contact || '—';
+        const phone = s.phone || '—';
+        const email = s.email || '—';
+        const address = s.address || '—';
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${idx + 1}</strong></td>
+          <td><span class="badge-code">${code}</span></td>
+          <td><strong style="color:var(--green-dk);">${name}</strong></td>
+          <td>${contact}</td>
+          <td>${phone !== '—' ? `<a href="tel:${phone}" class="contact-link">📞 ${phone}</a>` : '—'}</td>
+          <td>${email !== '—' ? `<a href="mailto:${email}" class="contact-link">✉️ ${email}</a>` : '—'}</td>
+          <td style="color:var(--text-muted);">${address}</td>
+          <td style="text-align:right;">
+            <button class="btn-action-edit" onclick="editSupplier(${s.id})">✏️ Edit</button>
+            <button class="btn-action-del" onclick="deleteSupplier(${s.id})">🗑️ Delete</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ── EDIT SUPPLIER ─────────────────────────────────────
+    function editSupplier(id) {
+      const s = suppliers.find(x => x.id == id);
+      if (!s) return;
+
+      document.getElementById('code').value = s.supplier_code || '';
+      document.getElementById('name').value = s.supplier_name || s.name || '';
+      document.getElementById('contact').value = s.contact_person || s.contact || '';
+      document.getElementById('phone').value = s.phone || '';
+      document.getElementById('email').value = s.email || '';
+      document.getElementById('address').value = s.address || '';
+      document.getElementById('editId').value = s.id;
+
+      document.getElementById('formIcon').textContent = '✏️';
+      document.getElementById('formTitle').textContent = `Update Supplier — ${s.supplier_name || s.supplier_code}`;
+      document.getElementById('formSub').textContent = 'Edit vendor contact info, address, or phone number';
+      document.getElementById('mainBtnText').textContent = 'Save Changes';
+      document.getElementById('cancelBtn').style.display = 'inline-flex';
+      document.getElementById('editingBadge').style.display = 'block';
+      document.getElementById('formCard').classList.add('editing-mode');
+
+      document.getElementById('formCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.getElementById('name').focus();
+    }
+
+    // ── RESET FORM ────────────────────────────────────────
+    function resetForm() {
+      document.getElementById('code').value = '';
+      document.getElementById('name').value = '';
+      document.getElementById('contact').value = '';
+      document.getElementById('phone').value = '';
+      document.getElementById('email').value = '';
+      document.getElementById('address').value = '';
+      document.getElementById('editId').value = '';
+
+      document.getElementById('formIcon').textContent = '➕';
+      document.getElementById('formTitle').textContent = 'Register New Supplier';
+      document.getElementById('formSub').textContent = 'Add vendor details, contact person, phone number, and location';
+      document.getElementById('mainBtnText').textContent = 'Add Supplier';
+      document.getElementById('cancelBtn').style.display = 'none';
+      document.getElementById('editingBadge').style.display = 'none';
+      document.getElementById('formCard').classList.remove('editing-mode');
+    }
+
+    // ── SAVE / UPDATE SUPPLIER ────────────────────────────
+    async function saveSupplier() {
+      const nameVal = document.getElementById('name').value.trim();
+      const codeVal = document.getElementById('code').value.trim() || ('SUP' + Date.now());
+      const contactVal = document.getElementById('contact').value.trim();
+      const phoneVal = document.getElementById('phone').value.trim();
+      const emailVal = document.getElementById('email').value.trim();
+      const addressVal = document.getElementById('address').value.trim();
+      const editIdVal = document.getElementById('editId').value;
+
+      if (!nameVal) {
+        showToast('⚠ Supplier / Company Name is required', 'error');
+        document.getElementById('name').focus();
+        return;
+      }
+
+      const body = {
+        supplier_code: codeVal,
+        code: codeVal,
+        supplier_name: nameVal,
+        name: nameVal,
+        contact_person: contactVal,
+        contact: contactVal,
+        phone: phoneVal,
+        email: emailVal,
+        address: addressVal
+      };
+
+      const btn = document.getElementById('mainBtn');
+      btn.disabled = true;
+
+      try {
+        if (!editIdVal) {
+          // CREATE
+          const r = await api('/api/suppliers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          const j = await r.json();
+          if (r.ok) {
+            showToast('✅ ' + (j.message || 'Supplier registered successfully!'));
+            resetForm();
+            loadSuppliers();
+          } else {
+            showToast('❌ ' + (j.error || 'Failed to add supplier'), 'error');
+          }
+        } else {
+          // UPDATE
+          const r = await api('/api/suppliers/' + editIdVal, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          const j = await r.json();
+          if (r.ok) {
+            showToast('✅ ' + (j.message || 'Supplier updated successfully!'));
+            resetForm();
+            loadSuppliers();
+          } else {
+            showToast('❌ ' + (j.error || 'Failed to update supplier'), 'error');
+          }
+        }
+      } catch (e) {
+        showToast('❌ Error: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    // ── DELETE SUPPLIER ───────────────────────────────────
+    async function deleteSupplier(id) {
+      const s = suppliers.find(x => x.id == id);
+      const name = s ? (s.supplier_name || s.name) : `ID #${id}`;
+      if (!confirm(`Are you sure you want to delete supplier "${name}"?\nThis cannot be undone.`)) return;
+
+      try {
+        const r = await api('/api/suppliers/' + id, { method: 'DELETE' });
+        const j = await r.json();
+        if (r.ok) {
+          showToast('✅ Supplier deleted');
+          if (document.getElementById('editId').value == id) resetForm();
+          loadSuppliers();
+        } else {
+          showToast('❌ ' + (j.error || 'Cannot delete supplier'), 'error');
+        }
+      } catch (e) {
+        showToast('❌ Error: ' + e.message, 'error');
+      }
+    }
+
+    // ── ENTER KEY ACCELERATION ────────────────────────────
+    ['code', 'name', 'contact', 'phone', 'email', 'address'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('keydown', e => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            saveSupplier();
+          }
+        });
+      }
+    });
+
+    // ── INITIALIZE ────────────────────────────────────────
+    checkAuth().then(() => {
+      loadSuppliers();
+    });
+  </script>
+</body>
+</html>
