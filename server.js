@@ -33,6 +33,61 @@ async function initDB() {
   const conn = await pool.getConnection();
   console.log('MySQL connected - Kigezi Traders DB');
 
+  // Ensure core tables exist (safe for existing databases)
+  await conn.query(`CREATE TABLE IF NOT EXISTS purchases (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    purchase_no VARCHAR(30) UNIQUE NOT NULL,
+    supplier_id INT NOT NULL,
+    purchase_date DATE NOT NULL,
+    total_amount DECIMAL(12,2) DEFAULT 0,
+    recorded_by INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await conn.query(`CREATE TABLE IF NOT EXISTS purchase_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    purchase_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT NOT NULL,
+    unit_cost DECIMAL(12,2) NOT NULL,
+    subtotal DECIMAL(12,2) NOT NULL
+  )`);
+  await conn.query(`CREATE TABLE IF NOT EXISTS stock_movements (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_id INT NOT NULL,
+    movement_type VARCHAR(20) NOT NULL,
+    quantity_change INT NOT NULL,
+    quantity_before INT NOT NULL,
+    quantity_after INT NOT NULL,
+    reference_no VARCHAR(50),
+    moved_by INT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await conn.query(`CREATE TABLE IF NOT EXISTS audit_logs (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT,
+    action VARCHAR(100) NOT NULL,
+    table_name VARCHAR(50),
+    record_id VARCHAR(50),
+    details TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await conn.query(`CREATE TABLE IF NOT EXISTS sales (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sale_no VARCHAR(30) UNIQUE NOT NULL,
+    sale_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    total_amount DECIMAL(12,2) DEFAULT 0,
+    sold_by INT,
+    customer_name VARCHAR(100)
+  )`);
+  await conn.query(`CREATE TABLE IF NOT EXISTS sale_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sale_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity INT NOT NULL,
+    unit_price DECIMAL(12,2) NOT NULL,
+    subtotal DECIMAL(12,2) NOT NULL
+  )`);
+
   const [users] = await conn.query('SELECT COUNT(*) as c FROM users');
   if (users[0].c === 0) {
     const hash = await bcrypt.hash('Kigezi123', 10);
@@ -74,7 +129,8 @@ app.post('/api/register', async (req, res) => {
     }
     
     const hashed = await bcrypt.hash(password, 10);
-    await conn.query('INSERT INTO users (username, email, password, role) VALUES (?,?,?,?)', [username, email, hashed, role]);
+    const full_name = req.body.full_name || username;
+    await conn.query('INSERT INTO users (username, password_hash, full_name, role) VALUES (?,?,?,?)', [username, hashed, full_name, role]);
     res.json({message: `Account created as ${role}! Now login.`});
   } catch(e){
     if(e.code === 'ER_DUP_ENTRY') res.status(400).json({error: 'Username or Email already exists'});
@@ -187,21 +243,47 @@ app.post('/api/purchases', requireRole(['manager','storekeeper','admin']), async
   try{
     await conn.beginTransaction();
     const {supplier_id, items} = req.body;
+    if(!items || !Array.isArray(items) || items.length === 0) throw new Error('No items provided');
+    if(!supplier_id) throw new Error('Supplier is required');
+    const recordedBy = req.session.user ? req.session.user.id : null;
     const purchase_no = 'PUR'+Date.now();
-    let total=0; items.forEach(i=> total+= parseInt(i.quantity)*parseFloat(i.unit_cost));
-    const [pRes] = await conn.query('INSERT INTO purchases (purchase_no, supplier_id, purchase_date, total_amount, recorded_by) VALUES (?,?,CURDATE(),?,?)', [purchase_no, supplier_id, total, req.session.user.id]);
+    // Support both field name conventions: qty/cost (from client) or quantity/unit_cost
+    let total=0;
+    items.forEach(i=>{
+      const qty = parseInt(i.qty || i.quantity) || 0;
+      const cost = parseFloat(i.cost || i.unit_cost) || 0;
+      total += qty * cost;
+    });
+    const [pRes] = await conn.query(
+      'INSERT INTO purchases (purchase_no, supplier_id, purchase_date, total_amount, recorded_by) VALUES (?,?,CURDATE(),?,?)',
+      [purchase_no, supplier_id, total, recordedBy]
+    );
     const purchase_id = pRes.insertId;
     for(let it of items){
-      const qty = parseInt(it.quantity); const cost = parseFloat(it.unit_cost);
-      await conn.query('INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?,?,?,?,?)', [purchase_id, it.product_id, qty, cost, qty*cost]);
-      const [prodRows] = await conn.query('SELECT current_stock FROM products WHERE id=? FOR UPDATE', [it.product_id]);
-      const before = prodRows[0].current_stock; const after = before + qty;
-      await conn.query('UPDATE products SET current_stock=? WHERE id=?', [after, it.product_id]);
-      await conn.query('INSERT INTO stock_movements (product_id, movement_type, quantity_change, quantity_before, quantity_after, reference_no, moved_by) VALUES (?,?,?,?,?,?,?)', [it.product_id,'purchase',qty,before,after,purchase_no,req.session.user.id]);
+      const qty = parseInt(it.qty || it.quantity) || 0;
+      const cost = parseFloat(it.cost || it.unit_cost) || 0;
+      const product_id = it.product_id;
+      await conn.query(
+        'INSERT INTO purchase_items (purchase_id, product_id, quantity, unit_cost, subtotal) VALUES (?,?,?,?,?)',
+        [purchase_id, product_id, qty, cost, qty*cost]
+      );
+      const [prodRows] = await conn.query('SELECT current_stock FROM products WHERE id=? FOR UPDATE', [product_id]);
+      if(prodRows.length === 0) throw new Error('Product not found: '+product_id);
+      const before = prodRows[0].current_stock;
+      const after = before + qty;
+      await conn.query('UPDATE products SET current_stock=? WHERE id=?', [after, product_id]);
+      await conn.query(
+        'INSERT INTO stock_movements (product_id, movement_type, quantity_change, quantity_before, quantity_after, reference_no, moved_by) VALUES (?,?,?,?,?,?,?)',
+        [product_id, 'purchase', qty, before, after, purchase_no, recordedBy]
+      );
     }
     await conn.commit();
-    res.json({message:'Purchase recorded', purchase_no});
-  }catch(e){ await conn.rollback(); res.status(400).json({error:e.message}); }finally{ conn.release(); }
+    res.json({message:'Purchase recorded successfully', purchase_no, total});
+  }catch(e){
+    await conn.rollback();
+    console.error('Purchase error:', e.message);
+    res.status(400).json({error: e.message || 'Failed to record purchase'});
+  }finally{ conn.release(); }
 });
 
 app.get('/api/sales', requireLogin, async (req,res)=>{
