@@ -32,19 +32,30 @@ app.use(express.static(path.join(__dirname, 'public')));
 let pool;
 
 async function initDB() {
-  const isCloudHost = process.env.DB_HOST && process.env.DB_HOST !== 'localhost' && process.env.DB_HOST !== '127.0.0.1';
-  const dbConfig = process.env.DATABASE_URL
-    ? { uri: process.env.DATABASE_URL, waitForConnections: true, connectionLimit: 10, ssl: { rejectUnauthorized: false } }
-    : {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT, 10) || 3306,
-        user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD || '',
-        database: process.env.DB_NAME || 'inventory_management',
-        waitForConnections: true,
-        connectionLimit: 10,
-        ssl: (process.env.DB_SSL === 'true' || isCloudHost) ? { rejectUnauthorized: false } : undefined
-      };
+  const uri = process.env.DATABASE_URL || process.env.SERVICE_URI || process.env['Service URI'] || process.env.MYSQL_URL;
+  let dbConfig;
+
+  if (uri) {
+    const cleanUri = uri.split('?')[0];
+    dbConfig = {
+      uri: cleanUri,
+      waitForConnections: true,
+      connectionLimit: 10,
+      ssl: { rejectUnauthorized: false }
+    };
+  } else {
+    const isCloudHost = process.env.DB_HOST && process.env.DB_HOST !== 'localhost' && process.env.DB_HOST !== '127.0.0.1';
+    dbConfig = {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT, 10) || 3306,
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || 'inventory_management',
+      waitForConnections: true,
+      connectionLimit: 10,
+      ssl: (process.env.DB_SSL === 'true' || process.env.DB_SSL === 'REQUIRED' || isCloudHost) ? { rejectUnauthorized: false } : undefined
+    };
+  }
 
   pool = mysql.createPool(dbConfig);
   const conn = await pool.getConnection();
