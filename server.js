@@ -54,12 +54,22 @@ async function initDB() {
   await conn.query(`CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100),
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
-    role ENUM('manager','storekeeper','salesperson','accountant','admin') NOT NULL,
+    role VARCHAR(50) NOT NULL,
     is_active TINYINT(1) DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   )`);
+  try {
+    await conn.query("ALTER TABLE users MODIFY COLUMN role VARCHAR(50) NOT NULL");
+  } catch (e) {}
+  try {
+    const [cols] = await conn.query("SHOW COLUMNS FROM users LIKE 'email'");
+    if (cols.length === 0) {
+      await conn.query("ALTER TABLE users ADD COLUMN email VARCHAR(100)");
+    }
+  } catch (e) {}
   await conn.query(`CREATE TABLE IF NOT EXISTS suppliers (
     id INT AUTO_INCREMENT PRIMARY KEY,
     supplier_code VARCHAR(20) UNIQUE NOT NULL,
@@ -166,37 +176,56 @@ function requireRole(roles){
 app.post('/api/register', async (req, res) => {
   const conn = await pool.getConnection();
   try {
-    const { username, email, password, role } = req.body;
-    if(!username || !password || !role) return res.status(400).json({error: 'All fields required'});
-    
-    // Only admin/manager can create staff roles, but anyone can self-register as customer/supplier
-    const allowedSelf = ['customer','supplier'];
-    if(!allowedSelf.includes(role)){
-      // For demo, allow all for your project defense. In production, check admin session
-      // if(!req.session.user || !['admin','manager'].includes(req.session.user.role)) return...
+    const { username, email, password, role, full_name } = req.body;
+    if (!username || !password || !role) {
+      return res.status(400).json({ error: 'Username, password, and role are required.' });
     }
     
+    const validRoles = ['manager', 'storekeeper', 'salesperson', 'accountant', 'admin', 'customer', 'supplier'];
+    const chosenRole = validRoles.includes(role) ? role : 'customer';
+
     const hashed = await bcrypt.hash(password, 10);
-    const full_name = req.body.full_name || username;
-    await conn.query('INSERT INTO users (username, password_hash, full_name, role) VALUES (?,?,?,?)', [username, hashed, full_name, role]);
-    res.json({message: `Account created as ${role}! Now login.`});
-  } catch(e){
-    if(e.code === 'ER_DUP_ENTRY') res.status(400).json({error: 'Username or Email already exists'});
-    else res.status(400).json({error: e.message});
-  } finally { conn.release(); }
+    const displayName = full_name && full_name.trim() ? full_name.trim() : username;
+    const cleanEmail = email && email.trim() ? email.trim() : null;
+
+    await conn.query(
+      'INSERT INTO users (username, email, password_hash, full_name, role) VALUES (?,?,?,?,?)',
+      [username.trim(), cleanEmail, hashed, displayName, chosenRole]
+    );
+    res.json({ message: `Account created successfully as ${chosenRole}! You can now sign in.` });
+  } catch (e) {
+    if (e.code === 'ER_DUP_ENTRY') {
+      res.status(400).json({ error: 'Username or Email already registered. Please choose another.' });
+    } else {
+      res.status(400).json({ error: e.message });
+    }
+  } finally {
+    conn.release();
+  }
 });
-app.post('/api/login', async (req,res)=>{
-  try{
-    const {username,password} = req.body;
-    const [rows] = await pool.query('SELECT * FROM users WHERE username=? AND is_active=1', [username]);
-    if(rows.length===0) return res.status(400).json({error:'Invalid username'});
+
+app.post('/api/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Please enter both username and password.' });
+    }
+    const cleanUser = username.trim();
+    const [rows] = await pool.query(
+      'SELECT * FROM users WHERE (username = ? OR (email IS NOT NULL AND email = ?)) AND is_active = 1',
+      [cleanUser, cleanUser]
+    );
+    if (rows.length === 0) return res.status(400).json({ error: 'Invalid username or account inactive.' });
     const user = rows[0];
     const ok = await bcrypt.compare(password, user.password_hash);
-    if(!ok) return res.status(400).json({error:'Invalid password'});
-    req.session.user = {id:user.id, username:user.username, role:user.role, full_name:user.full_name};
+    if (!ok) return res.status(400).json({ error: 'Incorrect password. Please try again.' });
+    req.session.user = { id: user.id, username: user.username, role: user.role, full_name: user.full_name };
     await pool.query('INSERT INTO audit_logs (user_id, action) VALUES (?,?)', [user.id, 'Login']);
-    res.json({message:'Login success', user:req.session.user});
-  }catch(e){ console.error(e); res.status(500).json({error:e.message}); }
+    res.json({ message: 'Login success', user: req.session.user });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 

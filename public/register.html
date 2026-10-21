@@ -1,1 +1,397 @@
-<!DOCTYPE html><html><head><title>Register - Kigezi Traders</title><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:Arial;background:#f5f7fb;display:flex;justify-content:center;align-items:center;height:100vh} .card{background:white;padding:25px;border-radius:10px;box-shadow:0 2px 10px #ccc;width:350px}input,select,button{width:100%;padding:10px;margin:6px 0;box-sizing:border-box}button{background:#1a5d1a;color:white;border:none;border-radius:5px;font-weight:bold;cursor:pointer}</style></head><body><div class="card"><h3 style="text-align:center">🏪 Kigezi Traders - Create Account</h3><input id="username" placeholder="Username"><input id="email" placeholder="Email"><input id="password" type="password" placeholder="Password"><select id="role"><option value="customer">Customer (Buy Products)</option><option value="supplier">Supplier (Supply Goods)</option><option value="storekeeper">Storekeeper (Staff)</option><option value="manager">Manager (Staff)</option></select><button onclick="register()">Create Account</button><p style="text-align:center"><a href="login.html">Already have account? Login</a></p><p id="msg"></p></div><script>async function register(){const body={username:username.value,email:email.value,password:password.value,role:role.value};const r=await fetch('/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const j=await r.json();document.getElementById('msg').innerText=j.message||j.error;if(r.ok){setTimeout(()=>location.href='login.html',1000)}}</script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Create Account – Kigezi Traders</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 40%, #388e3c 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
+        }
+
+        .register-wrap {
+            display: grid;
+            grid-template-columns: 1fr 1.15fr;
+            max-width: 960px;
+            width: 100%;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, .35);
+        }
+
+        /* LEFT PANEL */
+        .left-panel {
+            background: linear-gradient(160deg, #1a3a1a 0%, #1b5e20 60%, #2e7d32 100%);
+            padding: 44px 36px;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .brand-icon {
+            width: 60px;
+            height: 60px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, .15);
+            border: 2px solid rgba(255, 255, 255, .25);
+            display: grid;
+            place-items: center;
+            font-size: 30px;
+            margin-bottom: 20px;
+        }
+
+        .left-panel h1 {
+            font-size: 26px;
+            font-weight: 800;
+            line-height: 1.25;
+            margin-bottom: 10px;
+        }
+
+        .left-panel p {
+            font-size: 13.5px;
+            color: #a5d6a7;
+            line-height: 1.6;
+            margin-bottom: 26px;
+        }
+
+        .roles-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            font-size: 12.5px;
+            color: #c8e6c9;
+        }
+
+        .role-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            background: rgba(255, 255, 255, .06);
+            border: 1px solid rgba(255, 255, 255, .12);
+            border-radius: 10px;
+            padding: 10px 12px;
+        }
+
+        .role-item strong {
+            color: #ffffff;
+            display: block;
+            font-size: 13px;
+        }
+
+        .role-item span {
+            color: #a5d6a7;
+            font-size: 11.5px;
+        }
+
+        /* RIGHT PANEL */
+        .right-panel {
+            background: #ffffff;
+            padding: 44px 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .right-panel h2 {
+            font-size: 22px;
+            font-weight: 800;
+            color: #1a2332;
+            margin-bottom: 4px;
+        }
+
+        .right-panel .sub {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 22px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .field {
+            margin-bottom: 14px;
+        }
+
+        .field.full {
+            grid-column: 1 / -1;
+        }
+
+        .field label {
+            display: block;
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #5f6e80;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-bottom: 6px;
+        }
+
+        .field input,
+        .field select {
+            width: 100%;
+            padding: 11px 14px;
+            border: 1.5px solid #dde5ed;
+            border-radius: 9px;
+            font-size: 13.5px;
+            font-family: inherit;
+            color: #1a2332;
+            background: #ffffff;
+            outline: none;
+            transition: border-color .2s, box-shadow .2s;
+        }
+
+        .field input:focus,
+        .field select:focus {
+            border-color: #2e7d32;
+            box-shadow: 0 0 0 3px rgba(46, 125, 50, .12);
+        }
+
+        .btn-register {
+            width: 100%;
+            padding: 13px;
+            background: linear-gradient(135deg, #1b5e20 0%, #2e7d32 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 700;
+            font-family: inherit;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(27, 94, 32, .3);
+            transition: all .25s;
+            margin-top: 6px;
+        }
+
+        .btn-register:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 28px rgba(27, 94, 32, .4);
+        }
+
+        #msg {
+            margin-top: 14px;
+            padding: 11px 14px;
+            border-radius: 8px;
+            font-size: 13px;
+            display: none;
+        }
+
+        #msg.error {
+            display: block;
+            background: #ffebee;
+            color: #c62828;
+            border: 1px solid #ffcdd2;
+        }
+
+        #msg.success {
+            display: block;
+            background: #e8f5e9;
+            color: #1b5e20;
+            border: 1px solid #c8e6c9;
+        }
+
+        @media(max-width: 768px) {
+            .register-wrap {
+                grid-template-columns: 1fr;
+            }
+
+            .left-panel {
+                display: none;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .right-panel {
+                padding: 32px 24px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <div class="register-wrap">
+        <!-- LEFT -->
+        <div class="left-panel">
+            <div class="brand-icon">🌿</div>
+            <h1>Create Account<br>Kigezi Traders</h1>
+            <p>Join the inventory management system. Select your assigned system role or register as a partner.</p>
+            
+            <div class="roles-list">
+                <div class="role-item">
+                    <div>
+                        <strong>Shop Manager / Admin</strong>
+                        <span>Full oversight of catalog, stock, sales, users, and financials</span>
+                    </div>
+                </div>
+                <div class="role-item">
+                    <div>
+                        <strong>Store Keeper</strong>
+                        <span>Manage stock levels, suppliers, and incoming purchase batches</span>
+                    </div>
+                </div>
+                <div class="role-item">
+                    <div>
+                        <strong>Sales Person</strong>
+                        <span>Issue POS receipts, point-of-sale checkout, and client orders</span>
+                    </div>
+                </div>
+                <div class="role-item">
+                    <div>
+                        <strong>Accountant</strong>
+                        <span>Financial valuations, profit analytics, and audit logging</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT -->
+        <div class="right-panel">
+            <h2>Get Started 🚀</h2>
+            <p class="sub">Fill in your information to set up your account</p>
+
+            <form id="regForm" onsubmit="event.preventDefault(); handleRegister();">
+                <div class="form-grid">
+                    <div class="field full">
+                        <label>Full Name</label>
+                        <input id="fullName" type="text" placeholder="e.g. John Doe" required>
+                    </div>
+
+                    <div class="field">
+                        <label>Username</label>
+                        <input id="username" type="text" placeholder="e.g. jdoe" required autocomplete="username">
+                    </div>
+
+                    <div class="field">
+                        <label>Email Address</label>
+                        <input id="email" type="email" placeholder="e.g. john@example.com" autocomplete="email">
+                    </div>
+
+                    <div class="field full">
+                        <label>System Role</label>
+                        <select id="role" required>
+                            <option value="salesperson">Sales Person (Point of Sale)</option>
+                            <option value="storekeeper">Store Keeper (Inventory & Purchases)</option>
+                            <option value="manager">Shop Manager (Full Management)</option>
+                            <option value="accountant">Accountant (Reports & Audit)</option>
+                            <option value="admin">System Admin</option>
+                            <option value="customer">Customer (Direct Purchases)</option>
+                            <option value="supplier">Supplier (Vendor)</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label>Password</label>
+                        <input id="password" type="password" placeholder="At least 6 characters" required autocomplete="new-password">
+                    </div>
+
+                    <div class="field">
+                        <label>Confirm Password</label>
+                        <input id="confirmPassword" type="password" placeholder="Re-enter password" required autocomplete="new-password">
+                    </div>
+                </div>
+
+                <button type="submit" class="btn-register" id="submitBtn">Create Account →</button>
+            </form>
+
+            <div id="msg"></div>
+
+            <p style="text-align:center;margin-top:20px;font-size:13px;color:#5f6e80;">
+                Already have an account? <a href="login.html" style="color:#2e7d32;font-weight:700;text-decoration:none;">Sign In</a>
+            </p>
+        </div>
+    </div>
+
+    <script>
+        async function handleRegister() {
+            const fullName = document.getElementById('fullName').value.trim();
+            const username = document.getElementById('username').value.trim();
+            const email = document.getElementById('email').value.trim();
+            const role = document.getElementById('role').value;
+            const password = document.getElementById('password').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+            const msg = document.getElementById('msg');
+            const btn = document.getElementById('submitBtn');
+
+            msg.className = '';
+            msg.textContent = '';
+
+            if (!fullName || !username || !password || !role) {
+                msg.textContent = 'Please fill in all required fields.';
+                msg.className = 'error';
+                return;
+            }
+
+            if (password.length < 6) {
+                msg.textContent = 'Password must be at least 6 characters long.';
+                msg.className = 'error';
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                msg.textContent = 'Passwords do not match. Please re-enter.';
+                msg.className = 'error';
+                return;
+            }
+
+            btn.disabled = true;
+            btn.textContent = 'Creating Account...';
+
+            try {
+                const res = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        full_name: fullName,
+                        username: username,
+                        email: email || undefined,
+                        role: role,
+                        password: password
+                    })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    msg.textContent = '✅ ' + (data.message || 'Account created successfully! Redirecting to login...');
+                    msg.className = 'success';
+                    setTimeout(() => {
+                        location.href = 'login.html';
+                    }, 1400);
+                } else {
+                    msg.textContent = '⚠ ' + (data.error || 'Failed to create account.');
+                    msg.className = 'error';
+                    btn.disabled = false;
+                    btn.textContent = 'Create Account →';
+                }
+            } catch (err) {
+                msg.textContent = '⚠ Connection error: ' + err.message;
+                msg.className = 'error';
+                btn.disabled = false;
+                btn.textContent = 'Create Account →';
+            }
+        }
+    </script>
+</body>
+
+</html>

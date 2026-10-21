@@ -5,9 +5,10 @@ USE inventory_management;
 CREATE TABLE users (
   id INT AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(50) UNIQUE NOT NULL,
+  email VARCHAR(100),
   password_hash VARCHAR(255) NOT NULL,
   full_name VARCHAR(100) NOT NULL,
-  role ENUM('manager','storekeeper','salesperson','accountant','admin') NOT NULL,
+  role VARCHAR(50) NOT NULL,
   is_active TINYINT(1) DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
