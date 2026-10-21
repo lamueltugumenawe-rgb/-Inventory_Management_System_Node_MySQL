@@ -10,7 +10,6 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
   secret: process.env.SESSION_SECRET || 'kigezi_secret',
@@ -19,21 +18,70 @@ app.use(session({
   cookie: { maxAge: 8*60*60*1000 }
 }));
 
+// Root redirect
+app.get('/', (req, res) => {
+  if (req.session && req.session.user) {
+    res.redirect('/dashboard.html');
+  } else {
+    res.redirect('/login.html');
+  }
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+
 let pool;
 
 async function initDB() {
-  pool = mysql.createPool({
-    host: process.env.DB_HOST || 'localhost',
-    user: process.env.DB_USER || 'root',
-    password: process.env.DB_PASSWORD || '',
-    database: process.env.DB_NAME || 'inventory_management',
-    waitForConnections: true,
-    connectionLimit: 10
-  });
+  const isCloudHost = process.env.DB_HOST && process.env.DB_HOST !== 'localhost' && process.env.DB_HOST !== '127.0.0.1';
+  const dbConfig = process.env.DATABASE_URL
+    ? { uri: process.env.DATABASE_URL, waitForConnections: true, connectionLimit: 10, ssl: { rejectUnauthorized: false } }
+    : {
+        host: process.env.DB_HOST || 'localhost',
+        port: parseInt(process.env.DB_PORT, 10) || 3306,
+        user: process.env.DB_USER || 'root',
+        password: process.env.DB_PASSWORD || '',
+        database: process.env.DB_NAME || 'inventory_management',
+        waitForConnections: true,
+        connectionLimit: 10,
+        ssl: (process.env.DB_SSL === 'true' || isCloudHost) ? { rejectUnauthorized: false } : undefined
+      };
+
+  pool = mysql.createPool(dbConfig);
   const conn = await pool.getConnection();
   console.log('MySQL connected - Kigezi Traders DB');
 
-  // Ensure core tables exist (safe for existing databases)
+  // Ensure core tables exist (safe for clean cloud databases and existing databases)
+  await conn.query(`CREATE TABLE IF NOT EXISTS users (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(100) NOT NULL,
+    role ENUM('manager','storekeeper','salesperson','accountant','admin') NOT NULL,
+    is_active TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await conn.query(`CREATE TABLE IF NOT EXISTS suppliers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    supplier_code VARCHAR(20) UNIQUE NOT NULL,
+    supplier_name VARCHAR(100) NOT NULL,
+    contact_person VARCHAR(100),
+    phone VARCHAR(20),
+    email VARCHAR(100),
+    address TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
+  await conn.query(`CREATE TABLE IF NOT EXISTS products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    product_code VARCHAR(20) UNIQUE NOT NULL,
+    product_name VARCHAR(100) NOT NULL,
+    category VARCHAR(50),
+    unit_cost DECIMAL(10,2) NOT NULL,
+    selling_price DECIMAL(10,2) NOT NULL,
+    current_stock INT NOT NULL DEFAULT 0,
+    opening_quantity INT NOT NULL DEFAULT 0,
+    reorder_level INT NOT NULL DEFAULT 10,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  )`);
   await conn.query(`CREATE TABLE IF NOT EXISTS purchases (
     id INT AUTO_INCREMENT PRIMARY KEY,
     purchase_no VARCHAR(30) UNIQUE NOT NULL,
